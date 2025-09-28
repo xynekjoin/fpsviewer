@@ -1,17 +1,6 @@
---[[
-Blox Fruits Kaitun (Adaptado para xynekjoin)
-- Ultra optimización y limitador de FPS (20)
-- Selección automática de Marines
-- Farm hasta nivel 2800 (auto-quest y mob)
-- Tras nivel máximo: auto God Human (obtener estilos, materiales, beli, chalice y compra)
-- Luego: busca y almacena 3 frutas míticas (Dragon, Dough, Leopard, etc)
-- Modular y fácil de entender/editar
-- SOLO EDUCATIVO, riesgo de ban
---]]
+-- Kaitun Blox Fruits (Farm real + Marines + FastMode)
+-- Solo educativo. Puede ser baneable. Usa bajo tu propio riesgo.
 
------------------------------------------------------
--- OPTIMIZADOR Y LIMITADOR DE FPS
------------------------------------------------------
 if setfpscap then setfpscap(20) end
 for _,v in pairs(game:GetDescendants()) do
     if v:IsA("ParticleEmitter") or v:IsA("Trail") then v.Enabled = false end
@@ -25,151 +14,99 @@ if game.Lighting then
     game.Lighting.Brightness = 1
 end
 
------------------------------------------------------
--- CONFIGURACIÓN
------------------------------------------------------
-local Settings = {
-    LevelGoal = 2800,
-    FarmEnabled = true,
-    GodHumanEnabled = true,
-    FruitsEnabled = true,
-    Marines = true,
-    FruitsToGet = 3,
-    Debug = true
-}
-
------------------------------------------------------
--- AUTO MARINES
------------------------------------------------------
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
-
-local function AutoTeamMarines()
-    if not Settings.Marines then return end
-    if not player.Team or player.Team.Name ~= "Marines" then
-        local Remote = ReplicatedStorage:FindFirstChild("Remotes")
-        if Remote and Remote:FindFirstChild("CommF_") then
-            Remote.CommF_:InvokeServer("SetTeam", "Marines")
-        end
-        player.Neutral = false
-    end
-end
-AutoTeamMarines()
-repeat wait() until player.Team and player.Team.Name == "Marines"
-
------------------------------------------------------
--- FUNCIONES DE FARMEO
------------------------------------------------------
 local Workspace = game:GetService("Workspace")
-local function DebugPrint(msg)
-    if Settings.Debug then print("[Kaitun]: "..msg) end
-end
+local RunService = game:GetService("RunService")
 
--- Consigue el mejor quest y mob para tu nivel
-local function GetBestQuestMob()
-    local lvl = player.Data and player.Data.Level and player.Data.Level.Value or 1
-    -- SOLO PRIMERA ISLA COMO EJEMPLO (ajusta para otros mares y quests)
-    if lvl < 15 then
-        return "BanditQuest1","Bandit",[Vector3.new(1150, 17, 1630)],1
-    elseif lvl < 30 then
-        return "MonkeyQuest","Monkey",[Vector3.new(-1315, 38, 496)],2
-    end
-    -- Puedes expandir para otros mares...
-    -- Si no encuentra, afk
-    return nil,nil,nil,nil
-end
-
--- Toma la quest correcta
-local function TakeQuest(questName, questPart)
+-- Selección de Marines
+local function SelectMarines()
     local Remote = ReplicatedStorage:FindFirstChild("Remotes")
     if Remote and Remote:FindFirstChild("CommF_") then
-        Remote.CommF_:InvokeServer("StartQuest", questName, questPart)
+        Remote.CommF_:InvokeServer("SetTeam", "Marines")
+    end
+    player.Neutral = false
+end
+
+if player.Team == nil or player.Team.Name ~= "Marines" then
+    SelectMarines()
+    repeat wait() until player.Team and player.Team.Name == "Marines"
+end
+
+-- Tabla de quests y mobs (expándela para otros mares/quests)
+local QuestTable = {
+    {lvl=1, max=15, quest="BanditQuest1", part=1, mob="Bandit", npcPos=Vector3.new(1060,16,1547)},
+    {lvl=15, max=30, quest="MonkeyQuest", part=1, mob="Monkey", npcPos=Vector3.new(-1602,38,153)},
+    {lvl=30, max=55, quest="GorillaQuest", part=1, mob="Gorilla", npcPos=Vector3.new(-1322,39,-524)},
+    -- Agrega más quests aquí para los siguientes niveles...
+}
+
+local function GetQuest()
+    local plvl = player.Data.Level.Value
+    for i=#QuestTable,1,-1 do
+        if plvl >= QuestTable[i].lvl then
+            return QuestTable[i]
+        end
+    end
+    return QuestTable[1]
+end
+
+local function TakeQuest(quest, part)
+    local Remote = ReplicatedStorage:FindFirstChild("Remotes")
+    if Remote and Remote:FindFirstChild("CommF_") then
+        Remote.CommF_:InvokeServer("StartQuest", quest, part)
     end
 end
 
--- Busca y ataca mob correcto
-local function FarmMob(mobName, mobPos)
+local function TeleportTo(pos)
+    local char = player.Character or player.CharacterAdded:Wait()
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if root then
+        root.CFrame = CFrame.new(pos + Vector3.new(0,3,0))
+    end
+end
+
+local function FindMob(mobName)
     for _,mob in pairs(Workspace.Enemies:GetChildren()) do
         if mob.Name == mobName and mob:FindFirstChild("HumanoidRootPart") and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-            local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-            if root then
-                root.CFrame = mob.HumanoidRootPart.CFrame + Vector3.new(0,3,0)
-                -- Simula ataque
-                for i=1,3 do
-                    local tool = player.Character:FindFirstChildOfClass("Tool")
-                    if tool then tool:Activate() end
-                    wait(0.25)
-                end
-            end
+            return mob
+        end
+    end
+    return nil
+end
+
+local function AttackMob(mob)
+    local char = player.Character
+    local tool = char and char:FindFirstChildOfClass("Tool")
+    if mob and mob:FindFirstChild("HumanoidRootPart") then
+        TeleportTo(mob.HumanoidRootPart.Position)
+        if tool then
+            tool:Activate()
         end
     end
 end
 
------------------------------------------------------
--- LOOP PRINCIPAL: FARMEO DE NIVEL
------------------------------------------------------
-task.spawn(function()
-    while Settings.FarmEnabled do
-        local questName, mobName, mobPos, questPart = GetBestQuestMob()
-        if not questName then
-            DebugPrint("No hay quest para tu nivel: "..tostring(player.Data.Level.Value))
-            wait(3)
-        else
-            TakeQuest(questName, questPart)
-            FarmMob(mobName, mobPos)
-        end
-        wait(0.5)
-        -- Stop si llegas a máximo
-        if player.Data.Level.Value >= Settings.LevelGoal then
-            DebugPrint("Nivel máximo alcanzado")
-            break
-        end
-    end
-end)
-
------------------------------------------------------
--- GOD HUMAN (ESQUEMA BÁSICO, DEBES AJUSTAR FUNCIONES AVANZADAS)
------------------------------------------------------
+-- Loop principal de farm
 task.spawn(function()
     while true do
-        if Settings.GodHumanEnabled and player.Data.Level.Value >= 1800 then
-            DebugPrint("Intentando conseguir God Human (¡debes agregar funciones avanzadas aquí!)")
-            -- Aquí deberías poner tu lógica avanzada: farmear mastery, materiales, chalice, ir a NPC, etc.
-            -- Por ejemplo, puedes llamar a tu propio ejecutor de caminos, farmear materiales, etc.
-            break
-        end
-        wait(5)
-    end
-end)
-
------------------------------------------------------
--- FRUTAS MÍTICAS (ESQUEMA BÁSICO)
------------------------------------------------------
-task.spawn(function()
-    local fruitsFound = 0
-    while Settings.FruitsEnabled and fruitsFound < Settings.FruitsToGet do
-        if Workspace:FindFirstChild("Fruits") then
-            for _,fruit in pairs(Workspace.Fruits:GetChildren()) do
-                if fruit.Name:match("Dragon") or fruit.Name:match("Dough") or fruit.Name:match("Leopard") then
-                    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        root.CFrame = fruit.CFrame + Vector3.new(0,2,0)
-                        wait(0.2)
-                        fruit:Destroy()
-                        fruitsFound = fruitsFound + 1
-                        DebugPrint("¡Fruta mítica obtenida! Total: "..fruitsFound)
-                        wait(2)
-                    end
-                end
+        local q = GetQuest()
+        TakeQuest(q.quest, q.part)
+        wait(0.5)
+        TeleportTo(q.npcPos)
+        wait(0.5)
+        local mob = FindMob(q.mob)
+        if mob then
+            while mob and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 do
+                AttackMob(mob)
+                wait(0.1)
             end
+        else
+            -- Si no hay mobs vivos, espera respawn
+            wait(1)
         end
-        wait(7)
-    end
-    if fruitsFound >= Settings.FruitsToGet then
-        DebugPrint("¡Objetivo de frutas míticas cumplido!")
+        wait(0.5)
     end
 end)
 
------------------------------------------------------
-print("Kaitun ultra-optimizado iniciado (adaptado para xynekjoin)")
+print("Kaitun autofarm: Marines seleccionado, farm automático, fast mode ON.")
