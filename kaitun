@@ -1,0 +1,196 @@
+--[[
+   Blox Fruits Kaitun Script: Nivel Máximo, God Human, 3 Frutas Míticas,
+   Limitador de FPS (20), Ultra Optimización y Fast Mode
+   EDUCACIONAL. Usar esto puede resultar en ban.
+--]]
+
+-- ========== LIMITADOR DE FPS Y OPTIMIZACIÓN ==========
+if setfpscap then setfpscap(20) end -- Limitar FPS a 20
+
+-- Fast Mode/Ultra Optimización
+for _,v in pairs(game:GetDescendants()) do
+    if v:IsA("ParticleEmitter") or v:IsA("Trail") then
+        v.Enabled = false
+    elseif v:IsA("Explosion") then
+        v.Visible = false
+    elseif v:IsA("Decal") or v:IsA("Texture") then
+        v.Transparency = 1
+    elseif v:IsA("Sound") then
+        v.Volume = 0
+    end
+end
+if game.Lighting then
+    game.Lighting.FogEnd = 1e6
+    game.Lighting.GlobalShadows = false
+    game.Lighting.Brightness = 1
+end
+-- Opcional: Ocultar UIs (descomenta si lo deseas)
+-- for _,ui in pairs(game.CoreGui:GetChildren()) do
+--     if ui.Name ~= "RobloxGui" then pcall(function() ui:Destroy() end) end
+-- end
+
+-- ========== INICIO DEL KAITUN ==========
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hum = char:WaitForChild("Humanoid")
+local root = char:WaitForChild("HumanoidRootPart")
+
+-- ================== SETTINGS ==================
+local Settings = {
+    LevelGoal = 2800,
+    FruitsNeeded = 3,
+    GodHuman = {
+        GetIt = true,
+        MinLevel = 1800,
+        Styles = {
+            Superhuman = 400, DeathStep = 400, SharkmanKarate = 400, ElectricClaw = 400, DragonTalon = 400
+        },
+        Materials = {
+            FishTail = 20, MagmaOre = 20, DragonScale = 20, MysticDroplet = 10, ScrapMetal = 10,
+            GodsChalice = 1, ConjuredCocoa = 5
+        },
+        Beli = 5000000
+    },
+    FruitFarm = {
+        GetIt = true,
+        MythicalCount = 3
+    },
+    AutoFarm = true,
+    Debug = true
+}
+
+-- ================== MODULOS ==================
+local State = {
+    Level = 1,
+    FruitsGot = 0,
+    GodHumanDone = false
+}
+
+local function dprint(str)
+    if Settings.Debug then print("[Kaitun]: "..str) end
+end
+
+-- =========== AUTO LEVEL TO 2800 ===========
+function FarmToMaxLevel()
+    if not Settings.AutoFarm then return end
+    while State.Level < Settings.LevelGoal do
+        local quest, mob, mobPos = GetBestQuestForLevel(State.Level)
+        if not quest then dprint("No se encontró misión para nivel "..State.Level) break end
+        dprint("Farming: "..quest.." (Mob: "..mob..")")
+        TeleportTo(quest.NPC.Position)
+        TakeQuest(quest)
+        repeat
+            for _, m in pairs(Workspace.Mobs:GetChildren()) do
+                if m.Name == mob and m.Humanoid.Health > 0 then
+                    TeleportTo(m.HumanoidRootPart.Position + Vector3.new(0,3,0))
+                    AttackMob(m)
+                    wait(0.1)
+                end
+            end
+            wait(0.1)
+        until not IsQuestActive() or GetCurrentQuestKillCount() >= quest.Required
+        ClaimReward()
+        State.Level = player.Data.Level.Value
+        wait(0.5)
+    end
+end
+
+-- =========== AUTO GOD HUMAN ===========
+function AutoGodHuman()
+    if State.GodHumanDone or not Settings.GodHuman.GetIt or State.Level < Settings.GodHuman.MinLevel then return end
+    dprint("Comenzando obtener God Human")
+    for style, mastery in pairs(Settings.GodHuman.Styles) do
+        repeat
+            if GetCurrentMastery(style) < mastery then
+                FarmMastery(style, mastery)
+            end
+            wait(0.5)
+        until GetCurrentMastery(style) >= mastery
+        dprint("Mastería suficiente para "..style)
+    end
+    for mat, amount in pairs(Settings.GodHuman.Materials) do
+        repeat
+            if GetMaterialCount(mat) < amount then
+                FarmMaterial(mat, amount)
+            end
+            wait(0.5)
+        until GetMaterialCount(mat) >= amount
+        dprint("Material suficiente: "..mat)
+    end
+    while GetBeli() < Settings.GodHuman.Beli do
+        FarmBeli(Settings.GodHuman.Beli - GetBeli())
+        wait(1)
+    end
+    TeleportTo(GetAncientMonkPos())
+    BuyGodHuman()
+    State.GodHumanDone = true
+    dprint("God Human conseguido!")
+end
+
+-- =========== AUTO 3 FRUTAS MÍTICAS ===========
+function AutoMythicalFruits()
+    if State.FruitsGot >= Settings.FruitFarm.MythicalCount then return end
+    dprint("Buscando frutas míticas...")
+    while State.FruitsGot < Settings.FruitFarm.MythicalCount do
+        for _,fruit in pairs(Workspace.Fruits:GetChildren()) do
+            if IsMythicalFruit(fruit) then
+                TeleportTo(fruit.Position)
+                PickFruit(fruit)
+                StoreFruit(fruit)
+                State.FruitsGot = State.FruitsGot + 1
+                dprint("¡Fruta mítica conseguida! Total: "..State.FruitsGot)
+                wait(1)
+            end
+        end
+        wait(5)
+    end
+end
+
+-- ========== FUNCIONES FICTICIAS (STUBS) ==========
+function GetBestQuestForLevel(lvl)
+    return {NPC={Position=Vector3.new(0,0,0)}, Required=5}, "Bandit", Vector3.new(0,0,0)
+end
+function TeleportTo(pos)
+    root.CFrame = CFrame.new(pos)
+    wait(0.2)
+end
+function TakeQuest(quest) end
+function IsQuestActive() return true end
+function GetCurrentQuestKillCount() return math.random(5) end
+function ClaimReward() end
+function AttackMob(mob) mob.Humanoid.Health = 0 end
+function GetCurrentMastery(style) return math.random(300,401) end
+function FarmMastery(style, goal) dprint("Farming mastery "..style) wait(2) end
+function GetMaterialCount(mat) return math.random(Settings.GodHuman.Materials[mat]) end
+function FarmMaterial(mat, goal) dprint("Farming "..mat) wait(2) end
+function GetBeli() return math.random(Settings.GodHuman.Beli-100000, Settings.GodHuman.Beli+1) end
+function FarmBeli(amount) dprint("Farming Beli") wait(2) end
+function GetAncientMonkPos() return Vector3.new(100,20,-300) end
+function BuyGodHuman() dprint("Comprando God Human") wait(2) end
+function IsMythicalFruit(fruit)
+    return fruit.Name:match("Dragon") or fruit.Name:match("Leopard") or fruit.Name:match("Dough")
+end
+function PickFruit(fruit) dprint("Recogiendo "..fruit.Name) fruit:Destroy() end
+function StoreFruit(fruit) dprint("Almacenando "..fruit.Name) end
+
+-- ========== LOOP PRINCIPAL ==========
+task.spawn(function()
+    dprint("¡Kaitun iniciado!")
+    while true do
+        if Settings.AutoFarm and State.Level < Settings.LevelGoal then
+            FarmToMaxLevel()
+        elseif State.Level >= Settings.LevelGoal and not State.GodHumanDone then
+            AutoGodHuman()
+        elseif State.GodHumanDone and State.FruitsGot < Settings.FruitFarm.MythicalCount then
+            AutoMythicalFruits()
+        else
+            dprint("¡Todos los objetivos completados!")
+            break
+        end
+        wait(1)
+    end
+end)
